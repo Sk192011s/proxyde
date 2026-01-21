@@ -7,7 +7,8 @@ const ALLOWED_DOMAINS = [
     "pub-9c8bcd6f32434fe08628852555cc2e5c.r2.dev",
     "pub-cbf23f7a9f914d1a88f8f1cf741716db.r2.dev",
     "pub-45c2fb2299a2438ea38ae56d17f3078e.r2.dev",
-    "pub-50fdd8fdb8474becb9427139f00206ad.r2.dev"
+    "pub-50fdd8fdb8474becb9427139f00206ad.r2.dev",
+    "lugyi-application-stream.deno.dev"
 ];
 app.get("/stream", async (c) => {
     const targetUrl = c.req.query("url");
@@ -93,10 +94,10 @@ app.get("/", (c) => c.html(html`
         function generateLink() {
             const input = document.getElementById('inputUrl').value.trim();
             if (!input) return alert("Please enter a URL");
-            if (!input.includes('.r2.dev')) {
-                alert("Only .r2.dev links are supported!");
-                return;
-            }
+            if (!input.startsWith('http')) {
+    alert("Valid URL required!");
+    return;
+}
             const proxyLink = window.location.origin + "/stream?url=" + encodeURIComponent(input);
             document.getElementById('resultArea').classList.remove('hidden');
             document.getElementById('outputUrl').innerText = proxyLink;
