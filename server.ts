@@ -2,7 +2,11 @@ import { Hono } from "npm:hono@4";
 import { cors } from "npm:hono@4/cors";
 import { html } from "npm:hono@4/html";
 const app = new Hono();
-app.use('*', cors());
+app.use('*', cors({
+    origin: '*',
+    allowMethods: ['GET', 'HEAD'],
+    exposeHeaders: ['Content-Length', 'Content-Range', 'Content-Type', 'ETag', 'Accept-Ranges']
+}));
 const ALLOWED_DOMAINS = [
     "pub-9c8bcd6f32434fe08628852555cc2e5c.r2.dev",
     "pub-cbf23f7a9f914d1a88f8f1cf741716db.r2.dev",
@@ -10,7 +14,8 @@ const ALLOWED_DOMAINS = [
     "pub-50fdd8fdb8474becb9427139f00206ad.r2.dev",
     "lugyi-application-stream.deno.dev"
 ];
-app.get("/stream", async (c) => {
+app.get("/ping", (c) => c.text("pong"));
+app.on(['GET', 'HEAD'], "/stream", async (c) => {
     const targetUrl = c.req.query("url");
     if (!targetUrl) return c.text("URL Required", 400);
     try {
@@ -23,13 +28,29 @@ app.get("/stream", async (c) => {
         const range = c.req.header("range");
         if (range) requestHeaders.set("Range", range);
         const response = await fetch(targetUrl, {
-            method: "GET",
+            method: c.req.method,
             headers: requestHeaders,
         });
         if (!response.ok) return c.text("Source Error", response.status as any);
-        const newHeaders = new Headers(response.headers);
-        newHeaders.set("Access-Control-Allow-Origin", "*"); 
-        newHeaders.set("Cache-Control", "public, max-age=3600"); 
+        const newHeaders = new Headers();
+        const headersToKeep = [
+            "content-type",
+            "content-length",
+            "content-range",
+            "accept-ranges",
+            "last-modified",
+            "etag"
+        ];
+        headersToKeep.forEach(header => {
+            const value = response.headers.get(header);
+            if (value) {
+                newHeaders.set(header, value);
+            }
+        });
+        if (!newHeaders.has("content-type")) {
+            newHeaders.set("content-type", "video/mp4");
+        }
+        newHeaders.set("Cache-Control", "public, max-age=3600");
         return new Response(response.body, {
             status: response.status,
             headers: newHeaders,
@@ -50,7 +71,6 @@ app.get("/", (c) => c.html(html`
 </head>
 <body class="flex flex-col items-center justify-center min-h-screen p-4">
     <div class="max-w-xl w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-2xl">
-        <!-- Header -->
         <div class="text-center mb-8">
             <div class="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/20">
                 <i class="fa-solid fa-link text-2xl text-blue-500"></i>
@@ -58,7 +78,6 @@ app.get("/", (c) => c.html(html`
             <h1 class="text-2xl font-bold text-white">R2 Proxy Generator</h1>
             <p class="text-zinc-500 text-sm mt-2">Generate high-speed streaming links for your R2 storage.</p>
         </div>
-        <!-- Input Section -->
         <div class="space-y-4">
             <div>
                 <label class="block text-xs text-zinc-400 mb-1 ml-1">Original R2 Link</label>
@@ -72,7 +91,6 @@ app.get("/", (c) => c.html(html`
                 Generate Proxy Link
             </button>
         </div>
-        <!-- Result Section (Hidden by default) -->
         <div id="resultArea" class="hidden mt-6 pt-6 border-t border-zinc-800">
             <label class="block text-xs text-green-500 mb-2 ml-1 font-bold">
                 <i class="fa-solid fa-check-circle mr-1"></i> Generated Successfully
@@ -86,7 +104,6 @@ app.get("/", (c) => c.html(html`
             <p class="text-[10px] text-zinc-600 mt-2 text-center">Use this link in your player or app.</p>
         </div>
     </div>
-    <!-- Toast Notification -->
     <div id="toast" class="fixed bottom-5 left-1/2 -translate-x-1/2 bg-white text-black px-6 py-2 rounded-full shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 text-sm font-bold">
         Link Copied!
     </div>
@@ -94,10 +111,12 @@ app.get("/", (c) => c.html(html`
         function generateLink() {
             const input = document.getElementById('inputUrl').value.trim();
             if (!input) return alert("Please enter a URL");
-            if (!input.startsWith('http')) {
-    alert("Valid URL required!");
-    return;
-}
+            try {
+                new URL(input);
+            } catch {
+                alert("Valid URL required!");
+                return;
+            }
             const proxyLink = window.location.origin + "/stream?url=" + encodeURIComponent(input);
             document.getElementById('resultArea').classList.remove('hidden');
             document.getElementById('outputUrl').innerText = proxyLink;
